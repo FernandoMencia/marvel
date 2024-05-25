@@ -9,8 +9,8 @@ const app = express();
 const PORT = 3000;
 
 // Se definen las claves de acceso de la API de Marvel
-const PUBLIC_KEY = '4f8e9d2a6a5d5db728cc4b9c5866522b';
-const PRIVATE_KEY = 'bc38f06fa67308148007e14329b8c9964b815b0a';
+const PUBLIC_KEY = '';
+const PRIVATE_KEY = '';
 
 // Se conecta a la base de datos de MongoDB
 mongoose.connect('mongodb://localhost:27017/favoritesDB');
