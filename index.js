@@ -9,8 +9,8 @@ const app = express();
 const PORT = 3000;
 
 // Se definen las claves de acceso de la API de Marvel
-const PUBLIC_KEY = 'pegarAquiPublicKey';
-const PRIVATE_KEY = 'pegarAquiPrivateKey';
+const PUBLIC_KEY = '4f8e9d2a6a5d5db728cc4b9c5866522b';
+const PRIVATE_KEY = 'bc38f06fa67308148007e14329b8c9964b815b0a';
 
 // Se conecta a la base de datos de MongoDB
 mongoose.connect('mongodb://localhost:27017/favoritesDB');
@@ -184,6 +184,111 @@ app.get('/favorites', authenticate, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// ------------ NUEVAS RUTAS AÑADIDAS------------------
+
+// Nueva ruta para añadir un personaje de Marvel a la base de datos de favoritos
+app.post('/addmarvel/:name', authenticate, async (req, res) => {
+  try {
+    const { name } = req.params;
+    // Verificar si el personaje ya está en la base de datos
+    const existingCharacter = await Character.findOne({ name: name });
+    if (existingCharacter) {
+      return res.status(409).json({ message: 'El personaje ya está en la base de datos de favoritos' });
+    }
+
+    // Buscar el personaje en la API de Marvel
+    const characters = await fetchMarvelCharacters(name);
+    if (characters.length === 0) {
+      return res.status(404).json({ message: 'Personaje no encontrado en la API de Marvel' });
+    }
+
+    const marvelCharacter = characters[0];
+    const newCharacter = new Character({
+      name: marvelCharacter.name,
+      description: marvelCharacter.description,
+      comics: marvelCharacter.comics.items.map(item => item.name)
+    });
+
+    await newCharacter.save();
+    res.json(newCharacter);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+// Nueva ruta para añadir un personaje al azar desde la Api de Marvel
+
+// Para ello necesitamos modificar antes la función fetchMarvelCharacter:
+
+async function fetchRandomMarvelCharacter() {
+  const ts = new Date().getTime().toString();
+  const hash = crypto.createHash('md5').update(ts + PRIVATE_KEY + PUBLIC_KEY).digest('hex');
+
+  try {
+    // Paso 1: Obtener el número total de personajes
+    const totalCharactersResponse = await axios.get('https://gateway.marvel.com/v1/public/characters', {
+      params: {
+        ts: ts,
+        apikey: PUBLIC_KEY,
+        hash: hash,
+        limit: 1 // Solo solicitamos 1 personaje, pero obtenemos el total de personajes disponibles
+      }
+    });
+
+    const totalCharacters = totalCharactersResponse.data.data.total;
+
+    // Paso 2: Generar un desplazamiento aleatorio
+    const randomOffset = Math.floor(Math.random() * totalCharacters);
+
+    // Paso 3: Obtener un personaje al azar usando el desplazamiento aleatorio
+    const response = await axios.get('https://gateway.marvel.com/v1/public/characters', {
+      params: {
+        ts: ts,
+        apikey: PUBLIC_KEY,
+        hash: hash,
+        limit: 1, // Solo queremos un personaje en la respuesta
+        offset: randomOffset // Desplazamiento aleatorio
+      }
+    });
+
+    // Devolver el personaje obtenido
+    return response.data.data.results[0];
+  } catch (error) {
+    console.error('Error fetching random Marvel character:', error);
+    throw new Error('Error fetching random Marvel character');
+  }
+}
+
+// Nueva ruta para añadir un personaje al azar de Marvel a la base de datos de favoritos
+app.post('/addrandom', authenticate, async (req, res) => {
+  try {
+    // Obtener un personaje al azar de la API de Marvel
+    const marvelCharacter = await fetchRandomMarvelCharacter();
+
+    // Verificar si el personaje ya está en la base de datos
+    const existingCharacter = await Character.findOne({ name: marvelCharacter.name });
+    if (existingCharacter) {
+      return res.status(409).json({ message: `El personaje ${existingCharacter.name} ya está en la base de datos de favoritos` });
+    }
+
+    // Crear una nueva instancia del personaje y guardarla en la base de datos
+    const newCharacter = new Character({
+      name: marvelCharacter.name,
+      description: marvelCharacter.description,
+      comics: marvelCharacter.comics.items.map(item => item.name)
+    });
+
+    await newCharacter.save();
+    res.json(newCharacter);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+
 
 // Iniciar el servidor
 app.listen(PORT, () => {
